@@ -154,16 +154,15 @@ trainsample <- traindummyclean[sample(nrow(traindummyclean),nrow(traindummyclean
 X = as.matrix(trainsample[,-c('transactionRevenue'),with=FALSE])
 Y = as.matrix(trainsample$transactionRevenue)
 
-#Run Lasso 
+#Run Lasso with cross validation
 lasso <- cv.glmnet(X, Y)
 plot(lasso)
 lasso$lambda.min
-#1700 MSE
 coef(lasso, s = 'lambda.min')
 
 
-#Prep test set for prediction - not done yet - errors with predict function and memory
-newX <- model.matrix(~.,data=testdummyclean[0:200000,])
+#Prep test set for prediction 
+newX <- model.matrix(~.,data=testdummyclean)
 preds <- predict(lasso, newx = newX, s = 'lambda.min')
 
 #Histogram of training set transaction revenue for reference to compare to predictions
