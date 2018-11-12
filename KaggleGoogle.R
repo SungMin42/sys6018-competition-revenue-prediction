@@ -171,3 +171,22 @@ preds <- predict(lasso, newx = newX, s = 'lambda.min')
 hist(subset(traindummyclean$transactionRevenue,traindummyclean$transactionRevenue > 0))
 
 
+#------------------------------------
+# Spline
+X_new <- X
+table(X_new$hits)
+#Dropping hits as all values are the same
+X_new <- X_new[, hits:= NULL]
+newX_valid <- X_new
+newX_valid <- newX_valid[, hits:= NULL]
+
+lm <- lm(transactionRevenue ~ X_new$pageviews)
+plot(fitted(lm), rstudent(lm))
+#As not horizintal, it suggests a spline might be a good fit for it.
+
+fit_spline <- lm(Y ~ ns(pageviews), data = X_new)
+pred  <- predict(fit_spline, newdata = newX)
+#MSE
+sum((pred - valid$transactionRevenue) ^ 2 / rows)
+
+#We can't fit the smooth splines because of the problems with lower ranges.
