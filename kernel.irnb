@@ -1,0 +1,672 @@
+{
+  "cells": [
+    {
+      "metadata": {
+        "_uuid": "d85b4a85358bdb241d3ac683d0ac8de9c12f531c",
+        "_execution_state": "idle",
+        "trusted": true
+      },
+      "cell_type": "code",
+      "source": "## Importing packages\n\n# This R environment comes with all of CRAN and many other helpful packages preinstalled.\n# You can see which packages are installed by checking out the kaggle/rstats docker image: \n# https://github.com/kaggle/docker-rstats\n\nlibrary(tidyverse) # metapackage with lots of helpful functions\nlibrary(data.table)\nlibrary(jsonlite)\nlibrary(dplyr)\nlibrary(tidyr)\nlibrary(readr)\nlibrary(fastDummies)\n## Running code\n\n# In a notebook, you can run a single code cell by clicking in the cell and then hitting \n# the blue arrow to the left, or by clicking in the cell and pressing Shift+Enter. In a script, \n# you can run code by highlighting the code you want to run and then clicking the blue arrow\n# at the bottom of this window.\n\n## Reading in files\n\n# You can access files from datasets you've added to this kernel in the \"../input/\" directory.\n# You can see the files added to this kernel by running the code below. \n\nlist.files(path = \"../input/google-analytics-customer-revenue/\")\n\n## Saving data\n\n# If you save any files or images, these will be put in the \"output\" directory. You \n# can see the output directory by committing and running your kernel (using the \n# Commit & Run button) and then checking out the compiled version of your kernel.",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "30bf0026df37f230abf68599315e99045645a19d"
+      },
+      "cell_type": "code",
+      "source": "list.files(path = '../input/google-analytics-customer-revenue/')",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "1be4883a6ce7753e0f76a97dc97adb30d5af2cfb"
+      },
+      "cell_type": "code",
+      "source": "dtrain <- read_csv('../input/google-analytics-customer-revenue/train_sample.csv')\n#dtest <- read_csv('../input/test.csv')",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "cc86a66dffbf8932f9335b3cddf505ef89be52ee"
+      },
+      "cell_type": "code",
+      "source": "colnames(dtrain)  <- c('channelGrouping', 'customDimensions', 'date', 'device', 'fullVisitorId', 'geoNetwork', 'hits', 'socialEngagementType', 'totals', 'trafficSource', 'visitId', 'visitNumber', 'visitStartTime')\n",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "366cd8e001172c88ba121396ecc7df92568aa1b9"
+      },
+      "cell_type": "code",
+      "source": "names(dtrain)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "scrolled": false,
+        "_uuid": "17138279f494e41ba4f68d1ce53c8ebaa2579490"
+      },
+      "cell_type": "code",
+      "source": "glimpse(dtrain)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "38ec7697aface982d6f319b137a86095f0785cb8"
+      },
+      "cell_type": "markdown",
+      "source": "### Converting the dates"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "a2ec3e35cdc5b384e441d7376fa2561b8ee20938"
+      },
+      "cell_type": "code",
+      "source": "#Requirement for the as_datetime function\nlibrary(lubridate)\n\n# convert date column from character to Date class\ndtrain$date <- as.Date(as.character(dtrain$date), format='%Y%m%d')\n\n# convert dbl to date data type\ndtrain$visitStartTime <- as_datetime(dtrain$visitStartTime)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "77c044ef2415b433ef202eb5841d8c112f9be8d0"
+      },
+      "cell_type": "markdown",
+      "source": "### Converting JSON to columns... For that jsonlite library is used as well"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "985401588c92a576569ae5c13efd7f57a301962b"
+      },
+      "cell_type": "code",
+      "source": "tr_device <- paste(\"[\", paste(dtrain$device, collapse = \",\"), \"]\") %>% fromJSON(flatten = T)\ntr_geoNetwork <- paste(\"[\", paste(dtrain$geoNetwork, collapse = \",\"), \"]\") %>% fromJSON(flatten = T)\ntr_totals <- paste(\"[\", paste(dtrain$totals, collapse = \",\"), \"]\") %>% fromJSON(flatten = T)\ntr_trafficSource <- paste(\"[\", paste(dtrain$trafficSource, collapse = \",\"), \"]\") %>% fromJSON(flatten = T)\n\ndtrain <- cbind(dtrain, tr_device, tr_geoNetwork, tr_totals, tr_trafficSource) %>%\n  as.data.table()\n\n# drop the old json columns\ndtrain[, c('device', 'geoNetwork', 'totals', 'trafficSource') := NULL]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "d0a77fdabac40dc493d6370e234da6cd1da3d46d"
+      },
+      "cell_type": "code",
+      "source": "# values to convert to NA\nna_vals <- c('unknown.unknown', '(not set)', 'not available in demo dataset', \n             '(not provided)', '(none)', '<NA>')\n\nfor(col in names(dtrain)) {\n  \n  set(dtrain, i=which(dtrain[[col]] %in% na_vals), j=col, value=NA)\n  \n}",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "4a1a14e988c32d207f373eff6164d044520b9ddc"
+      },
+      "cell_type": "markdown",
+      "source": "### Getting a glimpse of data"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "d1787f6453d199a37f8a422113ccb6975349b685"
+      },
+      "cell_type": "code",
+      "source": "glimpse(dtrain)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "af19daca623643b358033f7e06aa04e1eb1576ff"
+      },
+      "cell_type": "markdown",
+      "source": "### Fuction to calculate the percentage of NA values"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "689550d14816165f262b6aec832f860bb2645b58"
+      },
+      "cell_type": "code",
+      "source": "rows <- nrow(dtrain)\nna_count <- sapply(dtrain, function(y) sum(length(which(is.na(y))))/ rows)\n#na_count <- data.frame(na_count)                  ",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "5b5b81a0096ca66e3ee6971a8e5ecc95a2679dc1",
+        "scrolled": true
+      },
+      "cell_type": "code",
+      "source": "na_count",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "e87ae9e460912f42f05e1c8d2591d76884f3b7a6"
+      },
+      "cell_type": "code",
+      "source": "#Threshold to remove\nthreshold <- 0.7",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "ca5ff1a8b8b42db0181ab2250d722cea181f207b"
+      },
+      "cell_type": "code",
+      "source": "x <- which(na_count <= threshold)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "f4a9e9d80b6186643b00a3857a184a3f27078022"
+      },
+      "cell_type": "code",
+      "source": "numerical_cols <- c('hits', 'visits', 'pageviews', 'bounces', 'newVisits', 'totalTransactionRevenue', 'transactionRevenue')",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "3d7b3e255b40b678b6f8d41eec96c5732da9f23a"
+      },
+      "cell_type": "code",
+      "source": "x <- (names(x)[!names(x) %in% numerical_cols])",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "309c649704bcb98b6bc7f6b8e5ba758bb225d8f0"
+      },
+      "cell_type": "code",
+      "source": "x",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "8816d9d3742ed52637007d0ef0746c7b1e329d89"
+      },
+      "cell_type": "code",
+      "source": "dtrain[, hits := as.numeric(hits)]\ndtrain[, visits := as.numeric(visits)]\ndtrain[, pageviews := as.numeric(pageviews)]\ndtrain[, bounces := as.numeric(bounces)]\ndtrain[, newVisits := as.numeric(newVisits)]\ndtrain[, transactionRevenue := as.numeric(transactionRevenue)]\ndtrain[, totalTransactionRevenue := as.numeric(totalTransactionRevenue)]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "16ad7e22f5df2c4ee68ed049e80bc80ee4278f0c"
+      },
+      "cell_type": "markdown",
+      "source": "### Removing the columns"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "2a9e6dd8a9f57cc32a1ccdfbafacb8e779ce119a"
+      },
+      "cell_type": "code",
+      "source": "dtrain[, c(x) := NULL]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "4bf0407bf1cf3c6ad7571993b0774dccb0319a40"
+      },
+      "cell_type": "code",
+      "source": "glimpse(dtrain)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "a49c5a771852f6659e9c5b9c9546ee0c8623d27d"
+      },
+      "cell_type": "markdown",
+      "source": "### Checking visits"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "bfbc9e9aec97b98c24b65d85b80c4dbede13f500"
+      },
+      "cell_type": "code",
+      "source": "table(dtrain$visits)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "6441ace6233247f27358bc651606553058f89403"
+      },
+      "cell_type": "markdown",
+      "source": "So it can be concluded that visits don't influence our model. Therefore, we won't use it."
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "287b3be332ed7b16314ad8665142a3fd420de5bd"
+      },
+      "cell_type": "code",
+      "source": "dtrain[, visits := NULL]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "4fd5b238c747fd21c02cb74a62d6b92ddd03eb9d"
+      },
+      "cell_type": "code",
+      "source": "range(dtrain$transactionRevenue/ 1e+06, na.rm = TRUE)",
+      "execution_count": 206,
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": "[1]     0.00 16023.75",
+            "text/latex": "\\begin{enumerate*}\n\\item 0\n\\item 16023.75\n\\end{enumerate*}\n",
+            "text/markdown": "1. 0\n2. 16023.75\n\n\n",
+            "text/html": "<ol class=list-inline>\n\t<li>0</li>\n\t<li>16023.75</li>\n</ol>\n"
+          },
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "533d48ffb5b0d5bc5c870308a56d6a4f3b318ed6"
+      },
+      "cell_type": "code",
+      "source": "transactionRevenue <- log(dtrain$transactionRevenue/ 1e+06)\ntotalTransactionRevenue <- log(dtrain$totalTransactionRevenue/ 1e+06)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "98641ebc4d4347c16789214628d2caa3c4ea747e"
+      },
+      "cell_type": "code",
+      "source": "plot(x = dtrain$pageviews, y = transactionRevenue)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "dd3d00cee79a6aa07dad63ae804e5683c191ae85"
+      },
+      "cell_type": "code",
+      "source": "lm <- lm(transactionRevenue ~ dtrain$pageviews)\nplot(fitted(lm), rstudent(lm))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "d855b064c64031f04385616ce1129000f82acf67"
+      },
+      "cell_type": "markdown",
+      "source": "### There appears to be a problem with the normality assumption. Relation between the log of transaction revenue and pageviews is not normal."
+    },
+    {
+      "metadata": {
+        "_uuid": "9fbbe07e1e0ad0a07237de9dad8a77b19a15dcbc"
+      },
+      "cell_type": "markdown",
+      "source": "### This indicates a similar relation to pageviews"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "scrolled": true,
+        "_uuid": "5601e7fd587e80b86680fc5bcf97db06350499d3"
+      },
+      "cell_type": "code",
+      "source": "glimpse(dtrain)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "7e6cccdfb55de83c81ed085d70512c127dbcad7b"
+      },
+      "cell_type": "code",
+      "source": "dtrain$transactionRevenue <-  replace(dtrain$transactionRevenue, is.na(dtrain$transactionRevenue), 0)\ndtrain$totalTransactionRevenue <-  replace(dtrain$totalTransactionRevenue, is.na(dtrain$totalTransactionRevenue), 0)\ndtrain$hits <-  replace(dtrain$hits, is.na(dtrain$hits), 0)\ndtrain$bounces <-  replace(dtrain$bounces, is.na(dtrain$bounces), 0)\ndtrain$pageviews <-  replace(dtrain$pageviews, is.na(dtrain$pageviews), 0)\ndtrain$newVisits <-  replace(dtrain$newVisits, is.na(dtrain$newVisits), 0)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "dc9b8902ec9e9cc67a655518c3908aff721fdfce"
+      },
+      "cell_type": "code",
+      "source": "plot(dtrain$transactionRevenue, dtrain$totalTransactionRevenue)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "aad920e7e0c810f9ccf171c096b34401ef91631d"
+      },
+      "cell_type": "markdown",
+      "source": "This indicates a very linear relationship"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "daf05d8673e27518ca98b3ac09d227ddae604b27"
+      },
+      "cell_type": "code",
+      "source": "library(splines)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "7736a7d5ef6433363d0d977e1316f9dc2a629b5a"
+      },
+      "cell_type": "code",
+      "source": "table(dtrain$newVisits)\ntable(dtrain$hits)\ntable(dtrain$bounces)\ntable(dtrain$pageviews)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "7686cd4186b6f6ee2b8f308c9c207edc67b59e0c"
+      },
+      "cell_type": "markdown",
+      "source": "Removing hits"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "f7af6daf32611ab7035f8e8630011ee3dcb97c39"
+      },
+      "cell_type": "code",
+      "source": "dtrain[, hits := NULL]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "e7f7eb31c915fc408f75c4e254d52800cfcafb9d"
+      },
+      "cell_type": "code",
+      "source": "dtrain[, c('operatingSystemVersion', 'browserVersion', 'browserSize', 'cityId', 'latitude', 'longitude', 'language') := NULL]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "3c7dcda9f5113f7aa91d7b3990757c8d0caa487a"
+      },
+      "cell_type": "code",
+      "source": "rows",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "65df5d2c9be83a96b1e9a88494bfdab0f4ef14f6"
+      },
+      "cell_type": "code",
+      "source": "rand_sample <- sample(rows, rows/ 3)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "5aedb23d34ec786b4dbc8c17f0895628aac5b740"
+      },
+      "cell_type": "code",
+      "source": "train <- dtrain[-rand_sample,]\nvalid <- dtrain[rand_sample,]",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "d40f6a8bc6acfb9116c799fcfe0a3cdc298b92fc"
+      },
+      "cell_type": "code",
+      "source": "train$transactionRevenue <- log(train$transactionRevenue/ 1e+06)\nvalid$transactionRevenue <- log(valid$transactionRevenue/ 1e+06)",
+      "execution_count": 213,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "cd5338f0db84e931c48514321fd75fa2572be3e2"
+      },
+      "cell_type": "code",
+      "source": "train$transactionRevenue <- replace(train$transactionRevenue, train$transactionRevenue < 0, 0)\nvalid$transactionRevenue <- replace(valid$transactionRevenue, valid$transactionRevenue < 0, 0)",
+      "execution_count": 214,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "05ddfb7466d8e1c93d45709cd865d0f828533780"
+      },
+      "cell_type": "code",
+      "source": "dtest <- read_csv('../input/google-analytics-customer-revenue/test_v2.csv')",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "194bcfb5270c8f344b526075f65740b00e8292a0"
+      },
+      "cell_type": "code",
+      "source": "glimpse(train)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "4bc85452cd640d0376c6edccdeb310e2c1453c3f"
+      },
+      "cell_type": "code",
+      "source": "range((train$transactionRevenue))\nrange((valid$transactionRevenue))",
+      "execution_count": 256,
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": "[1] 0.000000 9.681827",
+            "text/latex": "\\begin{enumerate*}\n\\item 0\n\\item 9.68182727562635\n\\end{enumerate*}\n",
+            "text/markdown": "1. 0\n2. 9.68182727562635\n\n\n",
+            "text/html": "<ol class=list-inline>\n\t<li>0</li>\n\t<li>9.68182727562635</li>\n</ol>\n"
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": "[1] 0.000000 8.853165",
+            "text/latex": "\\begin{enumerate*}\n\\item 0\n\\item 8.85316530299577\n\\end{enumerate*}\n",
+            "text/markdown": "1. 0\n2. 8.85316530299577\n\n\n",
+            "text/html": "<ol class=list-inline>\n\t<li>0</li>\n\t<li>8.85316530299577</li>\n</ol>\n"
+          },
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "fbab77a5a6579e023d274116e95cf0d563723e48"
+      },
+      "cell_type": "code",
+      "source": "transactionRevenue.grid <- seq(range(train$transactionRevenue)[1], range(train$transactionRevenue)[2])",
+      "execution_count": 220,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "b3f4f1fbb22913bff6db9951969527cdc5d0e04d"
+      },
+      "cell_type": "code",
+      "source": "fit_spline <- lm(transactionRevenue ~ ns(pageviews) ,data=train)",
+      "execution_count": 260,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "d4df6a6b3ce77251f4a951e1b9298f57d6ec46d9"
+      },
+      "cell_type": "code",
+      "source": "pred  <- predict(fit_spline ,newdata = valid)",
+      "execution_count": 261,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "6a734be2a1a67621a7c8d05ad8f6ea9733ed8ec0"
+      },
+      "cell_type": "code",
+      "source": "sum((pred - valid$transactionRevenue) ^ 2 / rows)",
+      "execution_count": 262,
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": "[1] 0.05133111",
+            "text/latex": "0.0513311058028709",
+            "text/markdown": "0.0513311058028709",
+            "text/html": "0.0513311058028709"
+          },
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "_uuid": "f171250f0be3a1e7d40ed69667e130263a6e26d5"
+      },
+      "cell_type": "markdown",
+      "source": "Using a smooth spline"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "cbc6990c335376a1d394e00b1a0c7063e018e502"
+      },
+      "cell_type": "code",
+      "source": "p_views <- replace(train$pageviews, train$pageviews < 1, 1)",
+      "execution_count": 239,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "b07087c8c29d35618f4d7ae38bf0d82b175c7ee5"
+      },
+      "cell_type": "code",
+      "source": "range(p_views)",
+      "execution_count": 241,
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": "[1]   1 300",
+            "text/latex": "\\begin{enumerate*}\n\\item 1\n\\item 300\n\\end{enumerate*}\n",
+            "text/markdown": "1. 1\n2. 300\n\n\n",
+            "text/html": "<ol class=list-inline>\n\t<li>1</li>\n\t<li>300</li>\n</ol>\n"
+          },
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "37a1bd4fbe7d8ac28d010adc2ee9bd09a1597860"
+      },
+      "cell_type": "code",
+      "source": "t_re <- replace(train$transactionRevenue, train$transactionRevenue < 1, 1)",
+      "execution_count": 242,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "1267dbb317b04f251b191252d3c9ea51c2e911a2"
+      },
+      "cell_type": "code",
+      "source": "smooth_spline <- smooth.spline(t_re, p_views, cv=TRUE)\nsmooth_pred  <- predict(smooth_spline ,newdata = valid)\nsum((smooth_pred - valid$transactionRevenue) ^ 2 / rows)",
+      "execution_count": 243,
+      "outputs": [
+        {
+          "output_type": "error",
+          "ename": "ERROR",
+          "evalue": "Error in smooth.spline(t_re, p_views, cv = TRUE): 'tol' must be strictly positive and finite\n",
+          "traceback": [
+            "Error in smooth.spline(t_re, p_views, cv = TRUE): 'tol' must be strictly positive and finite\nTraceback:\n",
+            "1. smooth.spline(t_re, p_views, cv = TRUE)",
+            "2. stop(\"'tol' must be strictly positive and finite\")"
+          ]
+        }
+      ]
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "4e822e7e7e5fe7dee4f2d861dd4cacfc2574212b"
+      },
+      "cell_type": "markdown",
+      "source": "### We are unable to fit in a smooth spline... settling with a natural spline"
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "R",
+      "language": "R",
+      "name": "ir"
+    },
+    "language_info": {
+      "mimetype": "text/x-r-source",
+      "name": "R",
+      "pygments_lexer": "r",
+      "version": "3.4.2",
+      "file_extension": ".r",
+      "codemirror_mode": "r"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 1
+}
