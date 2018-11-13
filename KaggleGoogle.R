@@ -1,4 +1,4 @@
-# Google Prediction Kaggle
+# Google Prediction Kaggle (OLS, Spline, Lasso)
 
 library(lubridate)
 library(magrittr)
@@ -154,21 +154,38 @@ trainsample <- traindummyclean[sample(nrow(traindummyclean),nrow(traindummyclean
 X = as.matrix(trainsample[,-c('transactionRevenue'),with=FALSE])
 Y = as.matrix(trainsample$transactionRevenue)
 
+OLS <- lm(transactionRevenue~.,data = trainsample)
+summary(OLS)
+OLSlim <- lm(transactionRevenue~deviceCategory_mobile+visitNumber+hits+pageviews+bounces+newVisits, data=trainsample)
+summary(OLSlim)
+
 #Run Lasso with cross validation
 lasso <- cv.glmnet(X, Y)
 plot(lasso)
 lasso$lambda.min
 coef(lasso, s = 'lambda.min')
 
-
-#Prep test set for prediction 
-newX <- model.matrix(~.,data=testdummyclean)
-preds <- predict(lasso, newx = newX, s = 'lambda.min')
+#Prep test set for prediction - not done yet - errors with predict function and memory
+newX <- as.matrix(testdummyclean)
+preds <- predict(lasso, s = 'lambda.min', newx = newX)
 
 #Histogram of training set transaction revenue for reference to compare to predictions
 #1.29% purchase rate (also for later reference to compare to predictions)
 hist(subset(traindummyclean$transactionRevenue,traindummyclean$transactionRevenue > 0))
+hist(preds)
 
+#Only top 1.3% of predictions are not set to zero
+for (x in 1:length(preds)){
+  if(preds[x] <= quantile(preds, .987)){
+    preds[x] <- 0 
+  }
+}
+
+#Write predictions to file
+submission <- read.csv('sample_submission.csv')
+submission <- data.frame(submission)
+submission$PredictedLogRevenue <- preds
+write.csv(submission, 'Google-Preds.csv', row.names = F) 
 
 #------------------------------------
 # Spline
